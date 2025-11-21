@@ -1,73 +1,257 @@
+# maingame.py
+import os
+from turtle import up
 import pygame
 from player import Player
-from platform_sprite import Platform
+from maze_generator import generate_maze
+from enemy import Enemy
+import random
+from pathlib import Path
+import math # تحتاج لهذا إذا كان كلاس Coin في هذا الملف
+
+
+class Coin(pygame.sprite.Sprite):
+    def __init__(self, x, y, size, image_path):
+        super().__init__()
+        original_coin_img = pygame.image.load("coin_gold.png").convert_alpha()
+        self.image = pygame.transform.scale(original_coin_img, (size, size))
+        self.rect = self.image.get_rect()
+        self.rect.topleft = (x, y)
+    pass
+
+
+def display_score(screen, score, win_score):
+    global score_font, WIDTH, GREEN, BLACK
+    score_text = f"Score: {score} / {win_score}"
+    text_surface = score_font.render(score_text, True, GREEN, WHITE) # (النص, سلاسة الحواف, لون النص, لون الخلفية)
+    text_rect = text_surface.get_rect()
+    padding = 10
+    text_rect.topright = (WIDTH - padding, padding)
+    screen.blit(text_surface, text_rect)
 
 
 pygame.init()
 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-screen = pygame.display.set_mode(
-                                (SCREEN_WIDTH, SCREEN_HEIGHT),
-                                 pygame.RESIZABLE)
-pygame.display.set_caption("The Scrap Collector")
+CELL_SIZE = 25
+MAZE_COLS = 68
+MAZE_ROWS = 31
 
 
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-BLUE = (0, 0, 255)
-RED = (255, 0, 0)
-GREEN = (0, 255, 0)
-
-player = Player(50, SCREEN_HEIGHT - 32)
-
-
-all_sprites = pygame.sprite.Group()
-all_sprites.add(player)
-
-clock = pygame.time.Clock()
-
-
-platform_list = pygame.sprite.Group()
-
-level = [
-    [0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40],
-    [200, SCREEN_HEIGHT - 150, 150, 20],
-    [500, SCREEN_HEIGHT - 250, 180, 20],
-    [180, SCREEN_HEIGHT - 350, 100, 20],
+maze =[[1]*64,
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,2,1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+     [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+     [1]*64
 ]
 
+# ألوان
+GREEN = (0, 255, 0)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+YELLOW = (255, 255, 0)
+BLUE = (0, 0, 255)
 
-for plat_data in level:
-    platform = Platform(plat_data[0], plat_data[1], plat_data[2], plat_data[3])
-    platform_list.add(platform)
-    all_sprites.add(platform)
+score_font = pygame.font.SysFont('Arial', 30, bold=True)
+# حساب الأبعاد الكلية للشبكة (المسارات والجدران)
+ROWS = len(maze)      # 31
+COLS = len(maze[0])   # 68
+# حجم النافذة يتم تحديده الآن بناءً على المتاهة
+WIDTH = COLS * CELL_SIZE # 68 * 30 = 2040
+HEIGHT = ROWS * CELL_SIZE # 31 * 30 = 930
 
+
+COIN_IMAGE_NAME = 'coin_gold.png' # ⬅️ قم بتغييره إلى اسم ملف العملة الخاص بك
+NUM_COINS = 25 # عدد العملات العشوائي
+WINNING_SCORE = 20
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+pygame.display.set_caption("Random Maze Game")
+
+try:
+    original_bg = pygame.image.load("background_image.png").convert()
+    background = pygame.transform.scale(original_bg, (WIDTH, HEIGHT))
+
+except Exception as e:
+    print(f"❌ خطأ تحميل الخلفية: فشل العثور على الملف في المسار: background_image.png. الرجاء التأكد من وجوده. خطأ النظام: {e}")
+    # إذا فشل التحميل، نستخدم سطح فارغ (Fallback)
+    background = pygame.Surface((WIDTH, HEIGHT))
+    background.fill(WHITE)
+
+coin_group = pygame.sprite.Group()
+
+
+START_ROW, START_COL = 1, 1
+# تعيين البداية (3)
+maze[START_ROW][START_COL] = 3
+
+for i in range(NUM_COINS):
+    while True:
+        # نبحث عن خلية مسار 0 (Path) غير محجوزة
+        r = random.randint(1, ROWS - 2)
+        c = random.randint(1, COLS - 2)
+        # نضمن أن تكون العملة في مسار فارغ وليست على نقطة البداية
+        if maze[r][c] == 0 and (r, c) != (START_ROW, START_COL):
+            # نضع قيمة مؤقتة (مثلاً 4) لتجنب وضع عملتين في نفس الخلية
+            maze[r][c] = 4
+            break
+
+    coin = Coin(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, COIN_IMAGE_NAME)
+    coin_group.add(coin)
+
+
+
+#maze = generate_maze(MAZE_COLS, MAZE_ROWS)
+enemies_group = pygame.sprite.Group()
+
+
+ENEMY_POSITIONS = [
+    (15, 1), # عند الصف 15، العمود 1 (في منتصف المتاهة تقريباً)
+    (1, 45), # عند الصف 1، العمود 45
+    (29, 29)# قريب من النهاية
+]
+# عدد الأعداء
+NUM_ENEMIES = 10
+enemy_list = []
+
+for i in range(NUM_ENEMIES):
+    # استخدام المواقع المحددة أو مواقع عشوائية بعيدة عن (1, 1)
+    # هنا نستخدم موقع عشوائي آمن (نقطة مسار 0) أو موقع محدد
+    
+    # اختيار موقع عشوائي (يجب التأكد أنه مسار '0')
+    while True:
+        # نبحث عن خلية مسار 0 (Path)
+        r = random.randint(1, ROWS - 2)
+        c = random.randint(1, COLS - 2)
+        if maze[r][c] == 0:
+            break
+            
+    # إنشاء العدو
+    e = Enemy(c * CELL_SIZE, r * CELL_SIZE, maze, CELL_SIZE)
+    e.choose_new_target()  # تحديد هدف أولي للعدو
+    enemies_group.add(e)
+    enemy_list.append(e)
+
+# إضافة مجموعة الأعداء إلى مجموعة كل الـ sprites (للرسم)
+
+
+start_col, start_row = 1, 1
+player = Player(start_col * CELL_SIZE, start_row * CELL_SIZE, maze)
+all_sprites = pygame.sprite.Group()
+all_sprites.add(player)
+all_sprites.add(enemies_group)
+all_sprites.add(coin_group)
+# متغير لتخزين حالة الحركة
+move_dir = {'up': False, 'down': False, 'left': False, 'right': False}
+
+
+def draw_maze():
+    for row in range(len(maze)):
+        for col in range(len(maze[0])):
+            rect = pygame.Rect(col*CELL_SIZE, row*CELL_SIZE, CELL_SIZE, CELL_SIZE)
+            if maze[row][col] == 1:
+                pygame.draw.rect(screen, BLACK, rect)
+            elif maze[row][col] == 0:
+                # ⬅️ تم حذف رسم اللون الأبيض هنا للسماح للخلفية بالظهور
+                pass
+            elif maze[row][col] == 3:
+                pygame.draw.rect(screen, GREEN, rect)
+
+
+SCORE = 0
 running = True
+clock = pygame.time.Clock()
+FPS = 60
 while running:
+    dt_ms = clock.tick(FPS)
+    dt = dt_ms / 1000.0  # تحويل إلى ثواني
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
-                player.go_left()
-            if event.key == pygame.K_RIGHT:
-                player.go_right()
-            if event.key == pygame.K_SPACE:
-                player.jump(platform_list)
-        if event.type == pygame.KEYUP:
-            if event.key == pygame.K_LEFT and player.change_x < 0:
-                player.stop()
-            if event.key == pygame.K_RIGHT and player.change_x > 0:
-                player.stop()
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_UP:
+                move_dir['up'] = True
+            elif event.key == pygame.K_DOWN:
+                move_dir['down'] = True
+            elif event.key == pygame.K_LEFT:
+                move_dir['left'] = True
+            elif event.key == pygame.K_RIGHT:
+                move_dir['right'] = True
+        elif event.type == pygame.KEYUP:
+            if event.key == pygame.K_UP:
+                move_dir['up'] = False
+            elif event.key == pygame.K_DOWN:
+                move_dir['down'] = False
+            elif event.key == pygame.K_LEFT:
+                move_dir['left'] = False
+            elif event.key == pygame.K_RIGHT:
+                move_dir['right'] = False
 
-    all_sprites.update(platform_list)
+    # تحريك اللاعب حسب الضغط
+    dx = 0
+    dy = 0
+    if move_dir['up']:
+        dy = -1
+    if move_dir['down']:
+        dy = 1
+    if move_dir['left']:
+        dx = -1
+    if move_dir['right']:
+        dx = 1
+    player.move(dx=dx, dy=dy, dt=dt)
+    enemies_group.update(dt)
+    coins_collected = pygame.sprite.spritecollide(player, coin_group, True) # True: لإزالة الكائن عند الاصطدام
 
-    screen.fill(BLACK)
+    if coins_collected:
+        # زيادة النقاط بعدد العملات المجمعة
+        SCORE += len(coins_collected)
+        print(f"💰 جمعت عملة! النقاط الحالية: {SCORE}/{WINNING_SCORE}")
+    screen.blit(background, (0, 0))
+    draw_maze()
     all_sprites.draw(screen)
-
+    display_score(screen, SCORE, WINNING_SCORE)
     pygame.display.flip()
+    
 
-    clock.tick(60)
+# **التحقق من الاصطدام (Collision Detection)**
+    # نتحقق مما إذا كان اللاعب قد اصطدم بأي عدو
+    if pygame.sprite.spritecollideany(player, enemies_group):
+        print("❌ انتهت اللعبة! لقد اصطدمت بالعدو.")
+        running = False
 
+    # ⬅️ التحقق من الفوز (تم نقله إلى داخل الحلقة)
+    if SCORE >= WINNING_SCORE:
+        print(f"🎉 مبروك يا باشمهندس! وصلت إلى النقاط المطلوبة ({SCORE}) وفزت باللعبة!")
+        running = False
+        
+    # تحقق الوصول للكنز
+    # هذا التحقق لم يعد ضرورياً ولكن نتركه لتحديد موقع الخسارة/الفوز
+    row = player.rect.y // CELL_SIZE
+    col = player.rect.x // CELL_SIZE
+    
 pygame.quit()
